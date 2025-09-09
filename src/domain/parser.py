@@ -87,9 +87,16 @@ class ParseResult:
                 )
             val = f(*args)
 
-            if val in (sympy.zoo, sympy.oo, sympy.nan, sympy.NaN):
+            if val in (sympy.zoo, sympy.oo, sympy.nan):
                 raise ValueError("Resultado no definido (NaN o infinito).")
-            return float(val)
+            import math
+            try:
+                float_val = float(val)
+                if math.isnan(float_val) or math.isinf(float_val):
+                    raise ValueError("Resultado no definido (NaN o infinito).")
+                return float_val
+            except (TypeError, ValueError):
+                raise ValueError("Resultado no válido.")
 
         return wrapped
 

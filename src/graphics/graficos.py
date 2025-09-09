@@ -1,5 +1,11 @@
 import matplotlib.pyplot as plt
 import math 
+import sys
+import os
+
+# Añadir el directorio padre al path para importar el parser
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from domain.parser import parse_function, ParseResult
 
 
 def generar_puntos(Tipofuncion, LimitInfX , LimitSupX , PuntosGraf=1000):
@@ -31,6 +37,149 @@ def generar_puntos(Tipofuncion, LimitInfX , LimitSupX , PuntosGraf=1000):
     
     return ValoresX , ValoresY
 
+
+def graficar_funcion_desde_texto(expr_str, rango_x=(-10, 10), intersecciones=None, punto_evaluado=None, allowed_vars=None):
+    """
+    Grafica una función a partir de una expresión de texto.
+    
+    Args:
+        expr_str: Expresión matemática como string (ej: "x**2 + 2*x + 1")
+        rango_x: Tupla con el rango de x (min, max)
+        intersecciones: Lista de puntos (x, y) para marcar intersecciones
+        punto_evaluado: Tupla (x, y) para marcar un punto específico
+        allowed_vars: Variables permitidas (por defecto ['x'])
+    
+    Returns:
+        tuple: (success: bool, message: str, parse_result: ParseResult)
+    """
+    if allowed_vars is None:
+        allowed_vars = ['x']
+    
+    # Parsear la expresión
+    parse_result = parse_function(
+        expr_str, 
+        allowed_vars=allowed_vars,
+        simplify_expression=True
+    )
+    
+    if not parse_result.is_valid:
+        return False, f"Error al parsear la función: {parse_result.error}", parse_result
+    
+    # Mostrar advertencias si las hay
+    if parse_result.warnings:
+        print("Advertencias:")
+        for warning in parse_result.warnings:
+            print(f"  - {warning}")
+    
+    try:
+        funcion_ejecutable = parse_result.to_callable(modules=['math'])
+        graficar_funcion(
+            funcion_ejecutable, 
+            expr_str, 
+            intersecciones=intersecciones,
+            punto_evaluado=punto_evaluado,
+            rango_x=rango_x
+        )
+        
+        return True, "Función graficada exitosamente", parse_result
+        
+    except Exception as e:
+        return False, f"Error al graficar: {str(e)}", parse_result
+
+
+def evaluar_funcion_en_punto(expr_str, x_valor, allowed_vars=None):
+    """
+    Evalúa una función en un punto específico.
+    
+    Args:
+        expr_str: Expresión matemática como string
+        x_valor: Valor de x donde evaluar
+        allowed_vars: Variables permitidas
+    
+    Returns:
+        tuple: (success: bool, result: float or None, message: str)
+    """
+    if allowed_vars is None:
+        allowed_vars = ['x']
+    
+    parse_result = parse_function(expr_str, allowed_vars=allowed_vars)
+    
+    if not parse_result.is_valid:
+        return False, None, f"Error: {parse_result.error}"
+    
+    try:
+        if 'x' in parse_result.variables:
+            resultado = parse_result.evaluate(x=x_valor)
+        else:
+            
+            resultado = parse_result.evaluate()
+        
+        return True, resultado, f"f({x_valor}) = {resultado}"
+        
+    except Exception as e:
+        return False, None, f"Error al evaluar: {str(e)}"
+
+
+def graficar_con_analisis(expr_str, rango_x=(-10, 10), mostrar_intersecciones=True, evaluar_en=None):
+    """
+    Grafica una función con análisis automático de intersecciones.
+    
+    Args:
+        expr_str: Expresión matemática como string
+        rango_x: Rango para la gráfica
+        mostrar_intersecciones: Si calcular y mostrar intersecciones
+        evaluar_en: Valor de x donde evaluar y marcar un punto
+    """
+    from domain.analysis import AnalisisFuncion
+    import sympy as sp
+    
+    
+    parse_result = parse_function(expr_str, allowed_vars=['x'])
+    
+    if not parse_result.is_valid:
+        print(f"Error: {parse_result.error}")
+        return
+    
+    intersecciones = None
+    punto_evaluado = None
+    
+    if mostrar_intersecciones and parse_result.expr:
+        try:
+            
+            x = sp.Symbol('x')
+            ceros = sp.solve(parse_result.expr, x)
+            intersecciones = []
+            
+            for cero in ceros:
+                if cero.is_real:
+                    x_val = float(cero.evalf())
+                    if rango_x[0] <= x_val <= rango_x[1]:
+                        intersecciones.append((x_val, 0))
+            
+            try:
+                y_intercept = float(parse_result.expr.subs(x, 0).evalf())
+                intersecciones.append((0, y_intercept))
+            except:
+                pass
+                
+        except Exception as e:
+            print(f"No se pudieron calcular intersecciones: {e}")
+    
+    if evaluar_en is not None:
+        success, resultado, mensaje = evaluar_funcion_en_punto(expr_str, evaluar_en)
+        if success:
+            punto_evaluado = (evaluar_en, resultado)
+            print(mensaje)
+    
+    # Graficar
+    success, mensaje, _ = graficar_funcion_desde_texto(
+        expr_str, 
+        rango_x=rango_x,
+        intersecciones=intersecciones,
+        punto_evaluado=punto_evaluado
+    )
+    
+    print(mensaje)
 
 
 def graficar_funcion(TipoFuncion, Func_str, intersecciones=None, punto_evaluado=None , rango_x = (-10 , 10)):
@@ -80,49 +229,39 @@ def graficar_funcion(TipoFuncion, Func_str, intersecciones=None, punto_evaluado=
     ax.legend()
     ax.set_xlim(LimitInfX, LimitSupX)
     plt.show()
-    
-    
 
 
-
-if __name__ == '__main__':
-    print("Ejecutando pruebas para el módulo plotter.py...")
-
-    # --- Prueba 1: Función cuadrática ---
-    # Así es como los otros módulos usarían tu función `graficar_funcion`.
+# Función de demostración
+def demo_graficador():
+    """Demostración del graficador con parser integrado."""
+    print("=== Demo del Graficador con Parser ===\n")
     
-    # 1. El parser convertiría "x**2 - 4" en una función lambda.
-    funcion_analizada = lambda x: x**2 - 4
-    
-    # 2. El módulo de análisis calcularía las intersecciones.
-    intersecciones_calculadas = [
-        (0, -4),  # Intersección eje Y
-        (2, 0),   # Intersección eje X
-        (-2, 0)   # Intersección eje X
+    # Ejemplos de funciones
+    ejemplos = [
+        "x**2 - 4",
+        "sin(x)",
+        "1/(x-2)",
+        "exp(x)",
+        "log(x+1)",
+        "sqrt(x**2 + 1)"
     ]
     
-    # 3. El usuario podría pedir evaluar la función en x=3.
-    punto_de_evaluacion = (3, 5) # f(3) = 3**2 - 4 = 5
+    for expr in ejemplos:
+        print(f"Probando: {expr}")
+        success, mensaje, _ = graficar_funcion_desde_texto(expr, rango_x=(-5, 5))
+        print(f"Resultado: {mensaje}\n")
+        
+        if success:
+            input("Presiona Enter para continuar...")
 
-    # 4. Llamamos a tu función con toda la información.
-    graficar_funcion(
-        TipoFuncion=funcion_analizada,
-        Func_str="x**2 - 4",
-        intersecciones=intersecciones_calculadas,
-        punto_evaluado=punto_de_evaluacion
-    )
 
-    # --- Prueba 2: Función con discontinuidad (1/x) ---
-    funcion_con_discontinuidad = lambda x: 1/x
-    intersecciones_con_discontinuidad = [] # No tiene intersecciones
-    punto_evaluado_2 = (2, 0.5) # f(2) = 1/2 = 0.5
-    
-    graficar_funcion(
-        TipoFuncion=funcion_con_discontinuidad,
-        Func_str="1/x",
-        intersecciones=intersecciones_con_discontinuidad,
-        punto_evaluado=punto_evaluado_2,
-        rango_x=(-5, 5) # Rango más pequeño para ver la discontinuidad en x=0
-    )
-    
-    print("Pruebas finalizadas.")
+if __name__ == "__main__":
+    # Ejemplo de uso
+    expr = "x**2 - 4*x + 3"
+    print(f"Graficando: {expr}")
+    graficar_con_analisis(expr, rango_x=(-2, 6), evaluar_en=2)
+
+
+
+
+
