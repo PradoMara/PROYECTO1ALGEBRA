@@ -2,10 +2,143 @@ import matplotlib.pyplot as plt
 import math 
 import sys
 import os
+import re
 
 # Añadir el directorio padre al path para importar el parser
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from domain.parser import parse_function, ParseResult
+
+
+def detectar_discontinuidades(parse_result, rango_x, tolerancia=0.01):
+
+    discontinuidades = []
+    
+    # Extraer puntos problemáticos de los warnings
+    for warning in parse_result.warnings:
+        if "≠ 0" in warning:
+
+            matches_minus = re.findall(r'x\s*-\s*(\d+(?:\.\d+)?)\s*≠', warning)
+            for match in matches_minus:
+                try:
+                    punto = float(match)  # x - 3 = 0 -> x = 3
+                    if rango_x[0] <= punto <= rango_x[1]:
+                        discontinuidades.append(punto)
+                except ValueError:
+                    continue
+            
+            # Patrón para "x + número"
+            matches_plus = re.findall(r'x\s*\+\s*(\d+(?:\.\d+)?)\s*≠', warning)
+            for match in matches_plus:
+                try:
+                    punto = -float(match)  # x + 3 = 0 -> x = -3
+                    if rango_x[0] <= punto <= rango_x[1]:
+                        discontinuidades.append(punto)
+                except ValueError:
+                    continue
+            
+            # Patrón para expresiones más complejas, extraer usando sympy
+            try:
+                import sympy as sp
+                from sympy import Symbol, solve
+                
+                # Extraer la expresión antes de "≠ 0"
+                expr_str = warning.split("≠")[0].strip()
+                x = Symbol('x')
+                
+                # Intentar parsear y resolver la expresión
+                expr = sp.sympify(expr_str)
+                soluciones = solve(expr, x)
+                
+                for sol in soluciones:
+                    if sol.is_real:
+                        punto = float(sol.evalf())
+                        if rango_x[0] <= punto <= rango_x[1]:
+                            discontinuidades.append(punto)
+                            
+            except Exception:
+                # Si falla el parsing con sympy, continuar
+                pass
+    
+    return sorted(list(set(discontinuidades)))  # Eliminar duplicados y ordenar
+
+
+def generar_intervalos_continuos(rango_x, discontinuidades, gap=0.01):
+
+    if not discontinuidades:
+        return [rango_x]
+    
+    intervalos = []
+    inicio = rango_x[0]
+    
+    for disco in discontinuidades:
+        if disco > rango_x[0] and disco < rango_x[1]:
+            # Agregar intervalo antes de la discontinuidad
+            if inicio < disco - gap:
+                intervalos.append((inicio, disco - gap))
+            # Siguiente intervalo comienza después de la discontinuidad
+            inicio = disco + gap
+    
+    # Agregar último intervalo
+    if inicio < rango_x[1]:
+        intervalos.append((inicio, rango_x[1]))
+    
+    return intervalos
+
+
+def generar_puntos_mejorado(Tipofuncion, LimitInfX, LimitSupX, discontinuidades=None, PuntosGraf=1000):
+
+    if LimitInfX >= LimitSupX:
+        return [], []
+    
+    # Si no hay discontinuidades, usar método original
+    if not discontinuidades:
+        return generar_puntos(Tipofuncion, LimitInfX, LimitSupX, PuntosGraf)
+    
+    # Generar intervalos continuos
+    intervalos = generar_intervalos_continuos((LimitInfX, LimitSupX), discontinuidades)
+    
+    ValoresX_total = []
+    ValoresY_total = []
+    
+    for i, (inicio, fin) in enumerate(intervalos):
+        if inicio >= fin:
+            continue
+            
+        # Generar puntos para este intervalo
+        incremento = (fin - inicio) / PuntosGraf
+        x = inicio
+        
+        intervalo_x = []
+        intervalo_y = []
+        
+        while x <= fin:
+            intervalo_x.append(x)
+            try:
+                y = Tipofuncion(x)
+                if isinstance(y, complex) or y == float('inf') or y == float('-inf') or y == float('nan'):
+                    intervalo_y.append(None)
+                else:
+                    # Filtrar valores muy grandes que podrían ser cerca de asíntotas
+                    if abs(y) > 1e6:
+                        intervalo_y.append(None)
+                    else:
+                        intervalo_y.append(y)
+                        
+            except (ValueError, ZeroDivisionError, TypeError):
+                intervalo_y.append(None)
+                
+            x += incremento
+        
+        # Agregar este intervalo a los resultados totales
+        ValoresX_total.extend(intervalo_x)
+        ValoresY_total.extend(intervalo_y)
+        
+        # Agregar separador entre intervalos (excepto el último)
+        if i < len(intervalos) - 1:
+            ValoresX_total.append(None)
+            ValoresY_total.append(None)
+    
+    return ValoresX_total, ValoresY_total
 
 
 def generar_puntos(Tipofuncion, LimitInfX , LimitSupX , PuntosGraf=1000):
@@ -74,6 +207,15 @@ def graficar_funcion_desde_texto(expr_str, rango_x=(-10, 10), rango_y=None, inte
     
     try:
         funcion_ejecutable = parse_result.to_callable(modules=['math'])
+        
+        # Adjuntar el parse_result a la función para detectar discontinuidades
+        funcion_ejecutable._parse_result = parse_result
+        
+        # Detectar discontinuidades
+        discontinuidades = detectar_discontinuidades(parse_result, rango_x)
+        if discontinuidades:
+            print(f"Discontinuidades detectadas en: {discontinuidades}")
+        
         graficar_funcion(
             funcion_ejecutable, 
             expr_str, 
@@ -84,6 +226,9 @@ def graficar_funcion_desde_texto(expr_str, rango_x=(-10, 10), rango_y=None, inte
         )
         
         return True, "Función graficada exitosamente", parse_result
+        
+    except Exception as e:
+        return False, f"Error al graficar: {str(e)}", parse_result
         
     except Exception as e:
         return False, f"Error al graficar: {str(e)}", parse_result
@@ -195,10 +340,45 @@ def graficar_funcion(TipoFuncion, Func_str, intersecciones=None, punto_evaluado=
     
     #generar los puntos de la funcion principal
     LimitInfX , LimitSupX = rango_x
-    ValoresX , ValoresY = generar_puntos(TipoFuncion, LimitInfX, LimitSupX)
     
-    # Graficar la función principal
-    ax.plot(ValoresX, ValoresY, label=f'f(x) = {Func_str}')
+    # Intentar detectar discontinuidades desde el contexto si está disponible
+    try:
+        # Si la función fue creada con parse_function, intentar acceder a los warnings
+        if hasattr(TipoFuncion, '_parse_result'):
+            discontinuidades = detectar_discontinuidades(TipoFuncion._parse_result, rango_x)
+            ValoresX, ValoresY = generar_puntos_mejorado(TipoFuncion, LimitInfX, LimitSupX, discontinuidades)
+        else:
+            ValoresX, ValoresY = generar_puntos(TipoFuncion, LimitInfX, LimitSupX)
+    except:
+        # Fallback al método original
+        ValoresX, ValoresY = generar_puntos(TipoFuncion, LimitInfX, LimitSupX)
+    
+    # Graficar la función principal manejando discontinuidades
+    current_x = []
+    current_y = []
+    first_segment = True  # Para controlar el label y color
+    
+    for i, (x, y) in enumerate(zip(ValoresX, ValoresY)):
+        if x is None or y is None:
+            # Discontinuidad - graficar el segmento actual y empezar uno nuevo
+            if current_x and current_y:
+                if first_segment:
+                    ax.plot(current_x, current_y, label=f'f(x) = {Func_str}', color='C0')
+                    first_segment = False
+                else:
+                    ax.plot(current_x, current_y, color='C0')  # Mismo color, sin label
+                current_x = []
+                current_y = []
+        else:
+            current_x.append(x)
+            current_y.append(y)
+    
+    # Graficar el último segmento si existe
+    if current_x and current_y:
+        if first_segment:
+            ax.plot(current_x, current_y, label=f'f(x) = {Func_str}', color='C0')
+        else:
+            ax.plot(current_x, current_y, color='C0')  # Mismo color, sin label
     
     #graficar interserciones (si es k hay)
     if intersecciones:
