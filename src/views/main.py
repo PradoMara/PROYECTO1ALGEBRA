@@ -1,3 +1,5 @@
+import sys
+import os
 import tkinter as tk
 import customtkinter as ctk
 from tkinter import messagebox
@@ -5,6 +7,8 @@ from tkinter import ttk
 from typing import Optional
 
 import sympy as sp
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 # Importar lógica de dominio y gráficos
 from src.domain.parser import parse_function
