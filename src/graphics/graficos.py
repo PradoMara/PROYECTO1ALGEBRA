@@ -38,13 +38,14 @@ def generar_puntos(Tipofuncion, LimitInfX , LimitSupX , PuntosGraf=1000):
     return ValoresX , ValoresY
 
 
-def graficar_funcion_desde_texto(expr_str, rango_x=(-10, 10), intersecciones=None, punto_evaluado=None, allowed_vars=None):
+def graficar_funcion_desde_texto(expr_str, rango_x=(-10, 10), rango_y=None, intersecciones=None, punto_evaluado=None, allowed_vars=None):
     """
     Grafica una función a partir de una expresión de texto.
     
     Args:
         expr_str: Expresión matemática como string (ej: "x**2 + 2*x + 1")
         rango_x: Tupla con el rango de x (min, max)
+        rango_y: Tupla con el rango de y (min, max) - opcional
         intersecciones: Lista de puntos (x, y) para marcar intersecciones
         punto_evaluado: Tupla (x, y) para marcar un punto específico
         allowed_vars: Variables permitidas (por defecto ['x'])
@@ -78,7 +79,8 @@ def graficar_funcion_desde_texto(expr_str, rango_x=(-10, 10), intersecciones=Non
             expr_str, 
             intersecciones=intersecciones,
             punto_evaluado=punto_evaluado,
-            rango_x=rango_x
+            rango_x=rango_x,
+            rango_y=rango_y
         )
         
         return True, "Función graficada exitosamente", parse_result
@@ -182,7 +184,7 @@ def graficar_con_analisis(expr_str, rango_x=(-10, 10), mostrar_intersecciones=Tr
     print(mensaje)
 
 
-def graficar_funcion(TipoFuncion, Func_str, intersecciones=None, punto_evaluado=None , rango_x = (-10 , 10)):
+def graficar_funcion(TipoFuncion, Func_str, intersecciones=None, punto_evaluado=None, rango_x=(-10, 10), rango_y=None):
     
     if not callable(TipoFuncion):
         print("Error: la funcion proporcionada no es un objeto valido")
@@ -228,6 +230,11 @@ def graficar_funcion(TipoFuncion, Func_str, intersecciones=None, punto_evaluado=
     
     ax.legend()
     ax.set_xlim(LimitInfX, LimitSupX)
+    
+    # Aplicar rango Y si se proporciona
+    if rango_y is not None:
+        ax.set_ylim(rango_y[0], rango_y[1])
+        
     plt.show()
 
 

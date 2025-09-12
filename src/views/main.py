@@ -51,12 +51,20 @@ class MainApp(ctk.CTk):
         self.entrada_x.grid(row=0, column=3, padx=4, pady=8)
 
         # rango x grafico
-        label_rango = ctk.CTkLabel(entradas_frame, text="Rango X (Para el grafico):", font=("Arial", 14))
-        label_rango.grid(row=1, column=0, padx=6, pady=4, sticky="e")
+        label_rango_x = ctk.CTkLabel(entradas_frame, text="Rango X (Para el grafico):", font=("Arial", 14))
+        label_rango_x.grid(row=1, column=0, padx=6, pady=4, sticky="e")
         self.entrada_xmin = ctk.CTkEntry(entradas_frame, width=90, placeholder_text="xmin")
         self.entrada_xmin.grid(row=1, column=1, sticky="w", padx=(4,2), pady=4)
         self.entrada_xmax = ctk.CTkEntry(entradas_frame, width=90, placeholder_text="xmax")
         self.entrada_xmax.grid(row=1, column=1, sticky="w", padx=(100,2), pady=4)
+
+        # rango y grafico (opcional)
+        label_rango_y = ctk.CTkLabel(entradas_frame, text="Rango Y (Opcional):", font=("Arial", 14))
+        label_rango_y.grid(row=2, column=0, padx=6, pady=4, sticky="e")
+        self.entrada_ymin = ctk.CTkEntry(entradas_frame, width=90, placeholder_text="ymin")
+        self.entrada_ymin.grid(row=2, column=1, sticky="w", padx=(4,2), pady=4)
+        self.entrada_ymax = ctk.CTkEntry(entradas_frame, width=90, placeholder_text="ymax")
+        self.entrada_ymax.grid(row=2, column=1, sticky="w", padx=(100,2), pady=4)
 
         #Botones
         botones_frame = ctk.CTkFrame(container)
@@ -97,7 +105,7 @@ class MainApp(ctk.CTk):
         frame_derecha = ctk.CTkFrame(division_inferior)
         frame_derecha.pack(side="left", fill="both", expand=True, padx=(5,0), pady=5)
 
-        self.label_instrucciones = ctk.CTkLabel(frame_derecha, text="Usa 'Graficar' para mostrar la función en una ventana externa.", wraplength=420, font=("Arial", 14))
+        self.label_instrucciones = ctk.CTkLabel(frame_derecha, text="Usa 'Graficar' para mostrar la función en una ventana externa.\n\nPuedes especificar rangos X e Y personalizados para controlar mejor la visualización.", wraplength=420, font=("Arial", 14))
         self.label_instrucciones.pack(padx=20, pady=20)
 
         ayuda_texto = ("Formato soportado:\n"
@@ -105,6 +113,7 @@ class MainApp(ctk.CTk):
                       " - Potencias: usar ^ o **\n"
                       " - Funciones: sin, cos, tan, exp, log, sqrt, abs ...\n"
                       " - Constantes: pi, e\n"
+                      " - Rango Y: Útil para funciones con asíntotas\n"
                       "Ejemplo: (x^2 - 1)/(x-2) + sin(x)")
         self.label_ayuda = ctk.CTkLabel(frame_derecha, text=ayuda_texto, justify="left", anchor="w")
         self.label_ayuda.pack(padx=15, pady=10, fill="x")
@@ -181,7 +190,8 @@ class MainApp(ctk.CTk):
         if not expr_str:
             messagebox.showwarning("Entrada vacía", "Ingresa una función primero.")
             return
-        # rango
+        
+        # rango X
         xmin = self.entrada_xmin.get().strip()
         xmax = self.entrada_xmax.get().strip()
         try:
@@ -190,11 +200,27 @@ class MainApp(ctk.CTk):
                 rxmax = float(xmax)
                 if rxmin >= rxmax:
                     raise ValueError("xmin debe ser menor que xmax")
-                rango = (rxmin, rxmax)
+                rango_x = (rxmin, rxmax)
             else:
-                rango = (-10, 10)
+                rango_x = (-10, 10)
         except ValueError as e:
-            messagebox.showerror("Rango inválido", f"Revisa los valores de rango: {e}")
+            messagebox.showerror("Rango X inválido", f"Revisa los valores de rango X: {e}")
+            return
+
+        # rango Y (opcional)
+        ymin = self.entrada_ymin.get().strip()
+        ymax = self.entrada_ymax.get().strip()
+        rango_y = None
+        try:
+            if ymin and ymax:
+                rymin = float(ymin)
+                rymax = float(ymax)
+                if rymin >= rymax:
+                    raise ValueError("ymin debe ser menor que ymax")
+                rango_y = (rymin, rymax)
+                self._append_result(f"Usando rango Y personalizado: [{rymin}, {rymax}]")
+        except ValueError as e:
+            messagebox.showerror("Rango Y inválido", f"Revisa los valores de rango Y: {e}")
             return
 
         # evaluar punto para resaltarlo si se ingresó
@@ -214,7 +240,8 @@ class MainApp(ctk.CTk):
 
         success, msg, parse_result = graficar_funcion_desde_texto(
             expr_str,
-            rango_x=rango,
+            rango_x=rango_x,
+            rango_y=rango_y,  # Nuevo parámetro
             punto_evaluado=punto,
             intersecciones=None  
         )
